@@ -29,7 +29,7 @@ jobs:
 
       - name: Build RubyVR firmware
         run: |
-          west build -b nrf52840dk -p auto -- -DDTC_OVERLAY_FILE=boards/RubyVR.overlay
+          west build -b nrf52840dk/nrf52840 -p auto -- -DDTC_OVERLAY_FILE=boards/RubyVR.overlay
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
