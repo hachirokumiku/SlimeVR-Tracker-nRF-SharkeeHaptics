@@ -1,0 +1,39 @@
+name: Build RubyVR Firmware
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'boards/RubyVR.overlay'
+      - 'src/**'
+      - 'prj.conf'
+      - 'CMakeLists.txt'
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: zephyrprojectrtos/ci:latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize west workspace
+        run: |
+          west init -l .
+          west update
+
+      - name: Build RubyVR firmware
+        run: |
+          west build -b nrf52840dk_nrf52840 --overlay boards/RubyVR.overlay -p
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: RubyVR-firmware
+          path: build/nrf52840dk_nrf52840/zephyr/app_update.*
+          retention-days: 30
