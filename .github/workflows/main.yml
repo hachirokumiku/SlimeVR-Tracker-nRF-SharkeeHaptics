@@ -3,16 +3,29 @@ name: Build Smol Slime Firmware
 on:
   push:
     branches: [ main ]
-  pull_request: 
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1. IMMEDIATE CLEANUP
-      # This repartitions the drive. It is the only way to get ~30GB free.
+      # 1. THE MASSIVE PURGE
+      # We manually wipe the biggest offenders before running any actions.
+      - name: 🧹 Scorch Earth Disk Purge
+        run: |
+          echo "=== Disk Space Before Purge ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo docker image prune --all --force
+          echo "=== Disk Space After Purge ==="
+          df -h
+
+      # 2. REPARTITION THE DISK
+      # This moves the workspace to the newly freed space.
       - name: 🚀 Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
@@ -22,21 +35,18 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
           remove-codeql: 'true'
-          remove-docker-images: 'true'
 
       - name: 💻 Checkout Repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      # 2. INSTALL ONLY NRF ESSENTIALS
-      - name: 🧰 Install Minimal System Dependencies
+      # 3. INSTALL ONLY ABSOLUTE MINIMALS
+      - name: 🧰 Install Build Essentials
         run: |
           sudo apt-get update
-          sudo apt-get install -y git cmake ninja-build gperf ccache dfu-util device-tree-compiler wget \
-            python3-dev python3-pip python3-setuptools python3-venv xz-utils file make gcc
+          sudo apt-get install -y git cmake ninja-build gperf python3-venv xz-utils file gcc
 
-      # 3. ARM-ONLY SDK (Avoids installing 10+ other architectures)
       - name: 🪁 Install Minimal ARM SDK
         run: |
           wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.16.9/zephyr-sdk-0.16.9_linux-x86_64_minimal.tar.xz
@@ -44,32 +54,25 @@ jobs:
           rm zephyr-sdk-0.16.9_linux-x86_64_minimal.tar.xz
           ~/zephyr-sdk-0.16.9/setup.sh -c -t arm-zephyr-eabi
 
-      # 4. SHALLOW WEST INITIALIZATION
-      - name: 🐍 Initialize West Workspace
+      # 4. SHALLOW SYNC
+      - name: 🐍 Initialize West
         run: |
           python3 -m venv ~/.venv
-          echo "$HOME/.venv/bin" >> $GITHUB_PATH
           source ~/.venv/bin/activate
           pip install west ninja
           west init -l .
-          # This is key: --narrow and depth=1 saves several GBs of git history
           west update --narrow -o=--depth=1
           west zephyr-export
           pip install -r zephyr/scripts/requirements.txt
 
-      # 5. TARGETED BUILD
-      - name: 🔨 Build Smol Slime (nRF52840)
+      # 5. BUILD
+      - name: 🔨 Build Sharkee Smol Slime
         run: |
           source ~/.venv/bin/activate
-          # Pristine build to ensure no leftover junk
           west build -b nrf52840dk/nrf52840 -p always -- -DNCS_TOOLCHAIN_VERSION=NONE
 
-      # 6. EXPORT ARTIFACTS
-      - name: 💾 Upload Firmware
+      - name: 💾 Upload
         uses: actions/upload-artifact@v4
         with:
-          name: Smol-Slime-Firmware
-          path: |
-            build/zephyr/zephyr.hex
-            build/zephyr/zephyr.uf2
-            build/zephyr/zephyr.bin
+          name: Sharkee-Smol-Slime
+          path: build/zephyr/zephyr.*
