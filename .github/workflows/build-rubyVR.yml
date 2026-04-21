@@ -10,9 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      # Use the ARM-specific image (significantly smaller)
-      image: zephyrprojectrtos/ci-arm:latest
+   container:
+      image: zephyrprojectrtos/zephyr-build:v0.16.9-arm
     
     steps:
       - name: Free Disk Space
