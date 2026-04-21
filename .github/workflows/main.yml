@@ -11,6 +11,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # 1. IMMEDIATE CLEANUP
+      # This repartitions the drive. It is the only way to get ~30GB free.
       - name: 🚀 Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
@@ -27,21 +29,22 @@ jobs:
         with:
           submodules: recursive
 
-      - name: 🧰 Install Build Essentials
+      # 2. INSTALL ONLY NRF ESSENTIALS
+      - name: 🧰 Install Minimal System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y git cmake ninja-build gperf ccache dfu-util device-tree-compiler wget \
             python3-dev python3-pip python3-setuptools python3-venv xz-utils file make gcc
 
+      # 3. ARM-ONLY SDK (Avoids installing 10+ other architectures)
       - name: 🪁 Install Minimal ARM SDK
         run: |
-          # Use the 'minimal' bundle to save space
           wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.16.9/zephyr-sdk-0.16.9_linux-x86_64_minimal.tar.xz
           tar xf zephyr-sdk-0.16.9_linux-x86_64_minimal.tar.xz -C ~/
           rm zephyr-sdk-0.16.9_linux-x86_64_minimal.tar.xz
-          # ONLY install the ARM toolchain
           ~/zephyr-sdk-0.16.9/setup.sh -c -t arm-zephyr-eabi
 
+      # 4. SHALLOW WEST INITIALIZATION
       - name: 🐍 Initialize West Workspace
         run: |
           python3 -m venv ~/.venv
@@ -49,21 +52,24 @@ jobs:
           source ~/.venv/bin/activate
           pip install west ninja
           west init -l .
-          # Aggressive shallow update to save disk
+          # This is key: --narrow and depth=1 saves several GBs of git history
           west update --narrow -o=--depth=1
           west zephyr-export
           pip install -r zephyr/scripts/requirements.txt
 
+      # 5. TARGETED BUILD
       - name: 🔨 Build Smol Slime (nRF52840)
         run: |
           source ~/.venv/bin/activate
-          # Building for the common Smol Slime stack target
+          # Pristine build to ensure no leftover junk
           west build -b nrf52840dk/nrf52840 -p always -- -DNCS_TOOLCHAIN_VERSION=NONE
 
+      # 6. EXPORT ARTIFACTS
       - name: 💾 Upload Firmware
         uses: actions/upload-artifact@v4
         with:
           name: Smol-Slime-Firmware
           path: |
             build/zephyr/zephyr.hex
+            build/zephyr/zephyr.uf2
             build/zephyr/zephyr.bin
