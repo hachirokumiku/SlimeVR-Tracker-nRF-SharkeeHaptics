@@ -3,56 +3,61 @@ name: Build Smol Slime Firmware
 on:
   push:
     branches: [ main ]
-  pull_request:
+  pull_request: 
     branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
       - name: 🚀 Maximize Build Space
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 5120
+          root-reserve-mb: 2048
+          swap-size-mb: 1024
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
 
       - name: 💻 Checkout Repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: 🧰 Install System Dependencies
+      - name: 🧰 Install Build Essentials
         run: |
           sudo apt-get update
           sudo apt-get install -y git cmake ninja-build gperf ccache dfu-util device-tree-compiler wget \
-            python3-dev python3-pip python3-setuptools python3-venv xz-utils file make gcc libsdl2-dev
+            python3-dev python3-pip python3-setuptools python3-venv xz-utils file make gcc
 
-      - name: 🪁 Install Zephyr SDK (ARM Only)
+      - name: 🪁 Install Minimal ARM SDK
         run: |
+          # Use the 'minimal' bundle to save space
           wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.16.9/zephyr-sdk-0.16.9_linux-x86_64_minimal.tar.xz
           tar xf zephyr-sdk-0.16.9_linux-x86_64_minimal.tar.xz -C ~/
           rm zephyr-sdk-0.16.9_linux-x86_64_minimal.tar.xz
+          # ONLY install the ARM toolchain
           ~/zephyr-sdk-0.16.9/setup.sh -c -t arm-zephyr-eabi
 
-      - name: 🐍 Setup Python & West
+      - name: 🐍 Initialize West Workspace
         run: |
           python3 -m venv ~/.venv
           echo "$HOME/.venv/bin" >> $GITHUB_PATH
           source ~/.venv/bin/activate
           pip install west ninja
           west init -l .
+          # Aggressive shallow update to save disk
           west update --narrow -o=--depth=1
           west zephyr-export
           pip install -r zephyr/scripts/requirements.txt
 
-      - name: 🔨 Build Smol Slime Firmware
+      - name: 🔨 Build Smol Slime (nRF52840)
         run: |
           source ~/.venv/bin/activate
-          # Standard target for Holyiot/nRF52840 Smol Slimes
+          # Building for the common Smol Slime stack target
           west build -b nrf52840dk/nrf52840 -p always -- -DNCS_TOOLCHAIN_VERSION=NONE
 
       - name: 💾 Upload Firmware
@@ -61,4 +66,4 @@ jobs:
           name: Smol-Slime-Firmware
           path: |
             build/zephyr/zephyr.hex
-            build/zephyr/zephyr.uf2
+            build/zephyr/zephyr.bin
