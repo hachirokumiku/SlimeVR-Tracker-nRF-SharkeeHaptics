@@ -11,11 +11,18 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: zephyrprojectrtos/ci:latest
-    env:
-      ZEPHYR_SDK_INSTALL_DIR: /opt/toolchains/zephyr-sdk-0.16.5
-
+      # Use the ARM-specific image (significantly smaller)
+      image: zephyrprojectrtos/ci-arm:latest
+    
     steps:
+      - name: Free Disk Space
+        # Clears pre-installed GitHub bloat to make room for 'west update'
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          docker system prune -af
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -25,32 +32,22 @@ jobs:
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Setup Zephyr SDK
-        run: |
-          mkdir -p /opt/toolchains
-          cd /opt/toolchains
-          wget -q https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.16.5/zephyr-sdk-0.16.5_linux-x86_64.tar.xz
-          tar -xf zephyr-sdk-0.16.5_linux-x86_64.tar.xz
-          cd zephyr-sdk-0.16.5
-          ./setup.sh -t arm-zephyr-eabi -h -c
-
       - name: Initialize west workspace
         run: |
           west init -l .
           west update
-
-      - name: Clean build directory
-        run: |
-          rm -rf build/
+          # The SDK is already in the container, just need to export it
+          west zephyr-export
 
       - name: Build RubyVR firmware (nrf52840dk/nrf52840)
+        # Note: -p auto handles the cleaning for you
         run: |
           west build -b nrf52840dk/nrf52840 -p auto -- -DDTC_OVERLAY_FILE=boards/RubyVR.overlay
 
       - name: List build artifacts
         run: |
           echo "=== Build Artifacts ==="
-          find build -type f \( -name "*.hex" -o -name "*.bin" -o -name "*.elf" -o -name "*.uf2" \) -exec ls -lh {} \;
+          find build/zephyr -type f \( -name "*.hex" -o -name "*.bin" -o -name "*.elf" -o -name "*.uf2" \) -exec ls -lh {} \;
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
@@ -58,15 +55,7 @@ jobs:
         with:
           name: RubyVR-firmware
           path: |
-            build/zephyr/app_update.hex
-            build/zephyr/app_update.bin
+            build/zephyr/zephyr.hex
+            build/zephyr/zephyr.bin
             build/zephyr/zephyr.elf
           retention-days: 30
-
-      - name: Build Summary
-        if: success()
-        run: |
-          echo "✅ RubyVR Firmware Build Successful!"
-          echo "Board: nrf52840dk/nrf52840"
-          echo "Overlay: boards/RubyVR.overlay"
-          ls -lah build/zephyr/ | grep -E "app_update|zephyr.elf"
