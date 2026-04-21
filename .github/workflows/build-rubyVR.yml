@@ -21,6 +21,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fix git safe directory
+        run: |
+          git config --global --add safe.directory /__w/SlimeVR-Tracker-nRF-SharkeeHaptics/SlimeVR-Tracker-nRF-SharkeeHaptics
 
       - name: Initialize west workspace
         run: |
@@ -35,5 +41,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: RubyVR-firmware
-          path: build/nrf52840dk_nrf52840/zephyr/app_update.*
+          path: |
+            build/zephyr/app_update.hex
+            build/zephyr/app_update.bin
+            build/zephyr/zephyr.elf
           retention-days: 30
+
+      - name: Build Summary
+        if: success()
+        run: |
+          echo "✅ RubyVR Firmware Build Successful!"
+          ls -lah build/zephyr/
